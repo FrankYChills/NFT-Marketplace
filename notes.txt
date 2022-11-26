@@ -1,0 +1,5 @@
+Marketplace contract should be approved to use NFTs on NFT contract (acc to ERC721 standards)
+Approve Marketplace from NFT contract
+To checkand use the minted NFTs access and usage use ERC721 interface with NFT contract address.
+IERC721 will be used to transfer NFTs minted from one account to another.
+BEWARE OF RE-ENTRANCY ATTACKS -> Prevent it via Mutexes or reentrancy guards as provided by openzeppelin
