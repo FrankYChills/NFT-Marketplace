@@ -15,8 +15,10 @@ error NftMarketplace__InsufficientTransfer(
     uint256 tokenId,
     uint256 nftPrice
 );
+error NftMarketplace__NoHoldings();
+error NftMarketplace__TransferFailed();
 
-contract NftMarketplace {
+contract NftMarketplace is ReentrancyGuard {
     struct Listing {
         uint256 price;
         address seller;
@@ -34,6 +36,12 @@ contract NftMarketplace {
         address indexed nftAddress,
         uint256 indexed tokenId,
         uint256 nftPrice
+    );
+
+    event ItemRemoved(
+        address indexed sender,
+        address indexed nftAddress,
+        uint256 tokenId
     );
 
     //Listed NFT contract -> (NFT TokenId(which NFT) -> Listing)
@@ -57,6 +65,7 @@ contract NftMarketplace {
     }
 
     // only the owner(minter) of the nft should be able to list the nft on the marketplace
+    //only owner of the nft should cancel its listings
     modifier isOwner(
         address nftAddress,
         uint256 tokenId,
@@ -72,7 +81,7 @@ contract NftMarketplace {
     }
 
     //before purchasing any nft make sure its listed
-    modifier NotListed(address nftAddress, uint256 tokenId) {
+    modifier notListed(address nftAddress, uint256 tokenId) {
         Listing memory nft = s_listings[nftAddress][tokenId];
         if (nft.price <= 0) {
             revert NftMarketplace__NftNotListed();
@@ -105,10 +114,10 @@ contract NftMarketplace {
     function buyItem(
         address nftAddress,
         uint256 tokenId
-    ) external payable nonReentrant NotListed(nftAddress, tokenId) {
+    ) external payable notListed(nftAddress, tokenId) nonReentrant {
         //get the item user wants to purchase
         Listing memory listedItem = s_listings[nftAddress][tokenId];
-        // revert if less amount is pais
+        // revert if less amount is paid than listed amount
         if (msg.value < listedItem.price) {
             revert NftMarketplace__InsufficientTransfer(
                 nftAddress,
@@ -129,5 +138,60 @@ contract NftMarketplace {
             tokenId //specifies which nft to tranfer
         );
         emit ItemBought(msg.sender, nftAddress, tokenId, listedItem.price);
+    }
+
+    function cancelItem(
+        address nftAddress,
+        uint256 tokenId
+    )
+        external
+        isOwner(nftAddress, tokenId, msg.sender)
+        notListed(nftAddress, tokenId)
+    {
+        //remove the listing from the marketplace
+        delete (s_listings[nftAddress][tokenId]);
+        emit ItemRemoved(msg.sender, nftAddress, tokenId);
+    }
+
+    function updateItem(
+        address nftAddress,
+        uint256 tokenId,
+        uint256 newPrice
+    )
+        external
+        isListed(nftAddress, tokenId, msg.sender)
+        isOwner(nftAddress, tokenId, msg.sender)
+    {
+        s_listings[nftAddress][tokenId].price = newPrice;
+        emit ItemListed(msg.sender, nftAddress, tokenId, newPrice);
+    }
+
+    function withdrawHoldings() external {
+        // get locked Value of the seller
+        uint256 lockedValue = s_lockedValue[msg.sender];
+        if (lockedValue <= 0) {
+            revert NftMarketplace__NoHoldings();
+        }
+        // set locked value to 0 before transferring (for security)
+        s_lockedValue[msg.sender] = 0;
+        (bool success, ) = payable(msg.sender).call{value: lockedValue}("");
+        if (!success) {
+            revert NftMarketplace__TransferFailed();
+        }
+    }
+
+    // GETTER FUNCTIONS
+
+    //get a listing by tokenId
+    function getListing(
+        address nftAddress,
+        uint256 tokenId
+    ) external view returns (Listing memory) {
+        return s_listings[nftAddress][tokenId];
+    }
+
+    // get holdings of seller
+    function getHolding(address seller) external view returns (uint256) {
+        return s_lockedValue[seller];
     }
 }
