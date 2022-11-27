@@ -159,7 +159,7 @@ contract NftMarketplace is ReentrancyGuard {
         uint256 newPrice
     )
         external
-        isListed(nftAddress, tokenId, msg.sender)
+        notListed(nftAddress, tokenId)
         isOwner(nftAddress, tokenId, msg.sender)
     {
         s_listings[nftAddress][tokenId].price = newPrice;

@@ -91,4 +91,101 @@ const { developmentChains } = require("../helper-hardhat-config");
           ).to.emit("ItemRemoved");
         });
       });
+      describe("Buy NFT", function () {
+        it("reverts if nft isn't listed", async () => {
+          await expect(
+            nftMarketplace.buyItem(basicNft.address, TOKEN_ID)
+          ).to.be.revertedWith("NftNotListed");
+        });
+        it("reverts if price isnt met", async () => {
+          await nftMarketplace.listItem(basicNft.address, TOKEN_ID, PRICE);
+          // try to buy with other account
+          nftMarketplace = await nftMarketplace.connect(user);
+          await expect(
+            nftMarketplace.buyItem(basicNft.address, TOKEN_ID)
+          ).to.be.revertedWith("InsufficientTransfer");
+        });
+        it("transfers the NFT to the buyer and update internal records", async () => {
+          await nftMarketplace.listItem(basicNft.address, TOKEN_ID, PRICE);
+          // connect user so he buys
+          nftMarketplace = await nftMarketplace.connect(user);
+          expect(
+            await nftMarketplace.buyItem(basicNft.address, TOKEN_ID, {
+              value: PRICE,
+            })
+          ).to.emit("ItemBought");
+          const newOwner = await basicNft.ownerOf(TOKEN_ID);
+          assert(newOwner.toString() == user.address);
+          const marketplaceHolding = await nftMarketplace.getHolding(
+            deployer.address
+          );
+          assert(marketplaceHolding.toString() == PRICE.toString());
+        });
+      });
+      describe("Update NFT", function () {
+        it("must be owner and the nft should have been listed", async () => {
+          await expect(
+            nftMarketplace.updateItem(basicNft.address, TOKEN_ID, PRICE)
+          ).to.be.revertedWith("NftNotListed");
+          await nftMarketplace.listItem(basicNft.address, TOKEN_ID, PRICE);
+          // other user tries to update the nft
+          nftMarketplace = await nftMarketplace.connect(user);
+          await expect(
+            nftMarketplace.updateItem(basicNft.address, TOKEN_ID, PRICE)
+          ).to.be.revertedWith("NotOwner");
+        });
+        it("updates the price of the item", async () => {
+          const newPrice = ethers.utils.parseEther("0.3");
+          await nftMarketplace.listItem(basicNft.address, TOKEN_ID, PRICE);
+          expect(
+            await nftMarketplace.updateItem(
+              basicNft.address,
+              TOKEN_ID,
+              newPrice
+            )
+          ).to.emit("ItemListed");
+          const listing = await nftMarketplace.getListing(
+            basicNft.address,
+            TOKEN_ID
+          );
+          assert(listing.price.toString(), newPrice.toString());
+        });
+      });
+      describe("Withdraw Holdings", function () {
+        it("doesn't allow to withraw with locked values of 0", async () => {
+          await expect(nftMarketplace.withdrawHoldings()).to.be.revertedWith(
+            "NoHoldings"
+          );
+        });
+        it("withdraw holdings", async () => {
+          await nftMarketplace.listItem(basicNft.address, TOKEN_ID, PRICE);
+          //connect user to purchase that
+          nftMarketplace = nftMarketplace.connect(user);
+          // buy nft
+          await nftMarketplace.buyItem(basicNft.address, TOKEN_ID, {
+            value: PRICE,
+          });
+          // connect back seller account
+          nftMarketplace = nftMarketplace.connect(deployer);
+          // holdings before
+          const sellerHoldingsBefore = await nftMarketplace.getHolding(
+            deployer.address
+          );
+          // account balance before
+          const deployerBalanceBefore = await deployer.getBalance();
+          // withdraw holdings
+          const txRes = await nftMarketplace.withdrawHoldings();
+          const txReceipt = await txRes.wait(1);
+          const { gasUsed, effectiveGasPrice } = txReceipt;
+          const gasCost = gasUsed.mul(effectiveGasPrice);
+          const deployerBalanceAfter = await deployer.getBalance();
+          assert(
+            deployerBalanceAfter.toString() ==
+              deployerBalanceBefore
+                .add(sellerHoldingsBefore)
+                .sub(gasCost)
+                .toString()
+          );
+        });
+      });
     });
