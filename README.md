@@ -1,3 +1,11 @@
+## NFT- Marketplace
+
+The App is deployed to Vercel.See Here(Live) -> [NFT-Marketplace](https://nft-marketplace-frankychills.vercel.app/)
+
+NFT Marketplace is a website to buy and sell NFTs.
+
+The FrontEnd Repo of the Website is at -> [NFT-Frontend](https://github.com/FrankYChills/NextJS-NFTMarketplace)
+
 ### Create a decentralized NFT Marketplace
 
 That will do the followings -
